@@ -1,26 +1,19 @@
-
-import numpy as np
-
-import ufl
 from dolfinx import fem, io, mesh, plot
-from ufl import ds, dx, grad, inner, dot
-
-from mpi4py import MPI
+from dolfinx.fem.petsc import LinearProblem
+from ufl import dx, grad, dot, TrialFunction, TestFunction, SpatialCoordinate
 from petsc4py.PETSc import ScalarType
+from mpi4py import MPI
+import numpy as np
 import pyvista as pv
-from dolfinx.fem import Function, FunctionSpace 
-# +
-nx = 10
-ny = 10
 
-L_x = 1.0
-L_y = 1.0 
+nx, ny = 10, 10
+L_x, L_y = 1.0, 1.0
 
 msh = mesh.create_rectangle(comm=MPI.COMM_WORLD,
                             points=((0.0, 0.0), (L_x, L_y)), n=(nx, ny),
                             cell_type=mesh.CellType.triangle,)
 
-V = fem.FunctionSpace(msh, ("Lagrange", 1))
+V = fem.functionspace(msh, ("Lagrange", 1))
 
 u_analytical = fem.Function(V)
 u_analytical.interpolate(lambda x: 1 + x[0]**2 + 2 * x[1]**2)
@@ -39,74 +32,45 @@ bc = fem.dirichletbc(u_analytical, dofs)
 
 # Direct problem
 
-u = ufl.TrialFunction(V)
-v = ufl.TestFunction(V)
+u = TrialFunction(V)
+v = TestFunction(V)
 
-x = ufl.SpatialCoordinate(msh)
+x = SpatialCoordinate(msh)
 f = fem.Constant(msh, ScalarType(5)) # -6
 
 a = dot(grad(u), grad(v)) * dx
 L = dot(f, v) * dx 
 
-problem = fem.petsc.LinearProblem(a, L, bcs=[bc], petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
-u_direct = problem.solve()
-
-# with io.XDMFFile(msh.comm, "out_poisson/poisson.xdmf", "w") as file:
-#     file.write_mesh(msh)
-#     file.write_function(u_direct)
-
+problem_direct = LinearProblem(a, L, bcs=[bc], petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+u_direct = problem_direct.solve()
 
 # Adjoint problem
 
-q = ufl.TrialFunction(V)
-p = ufl.TestFunction(V)
+q = TrialFunction(V)
+p = TestFunction(V)
 
 bc_adjoint = fem.dirichletbc(value=ScalarType(0), dofs=dofs, V=V)
 
-
-f_adjoint = fem.Function(V)
-f_adjoint.x.array[:] = u_direct.x.array[:] - u_analytical.x.array[:]
-
 a_adjoint = - dot(grad(q), grad(p)) * dx
-L_adjoint = dot(f_adjoint, p) * dx 
+L_adjoint = dot(u_direct-u_analytical, p) * dx 
 
-
-problem_adjoint = fem.petsc.LinearProblem(a_adjoint, L_adjoint, bcs=[bc_adjoint], petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+problem_adjoint = LinearProblem(a_adjoint, L_adjoint, bcs=[bc_adjoint], petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
 u_adjoint = problem_adjoint.solve()
 
-# with io.XDMFFile(msh.comm, "out_poisson/poisson_adjoint.xdmf", "w") as file:
-#     file.write_mesh(msh)
-#     file.write_function(u_adjoint)
 
-# Gradient of functional (minimizes the {u_direct - u_analytical}) with respect to f
-
+dJ_df_form = fem.form(u_adjoint * dx)
 
 alpha = 1e2
-
 
 scalar_f = [5]
 iterations = np.arange(0,51,1)
 
-
 for i in range(50):
-
     
-    u_direct = problem.solve()
-    
-    
-    f_adjoint = fem.Function(V)
-    f_adjoint.x.array[:] = u_direct.x.array[:] - u_analytical.x.array[:]
-
-    a_adjoint = - dot(grad(q), grad(p)) * dx
-    L_adjoint = dot(f_adjoint, p) * dx 
-
-
-    problem_adjoint = fem.petsc.LinearProblem(a_adjoint, L_adjoint, bcs=[bc_adjoint], petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+    u_direct = problem_direct.solve()
     u_adjoint = problem_adjoint.solve()
 
-    formm = fem.form(u_adjoint * dx)
-    delJ_delf = fem.assemble_scalar(formm)
-    # print("Derivative is :", delJ_delf)
+    delJ_delf = fem.assemble_scalar(dJ_df_form)
     f.value = delJ_delf * alpha + f.value
     print("New f is: ", f.value)
     scalar_f.append(delJ_delf * alpha + f.value)
@@ -116,9 +80,10 @@ import matplotlib.pyplot as plt
 plt.plot(iterations, scalar_f)
 plt.xlabel("Iteration")
 plt.ylabel("$f$")
-plt.savefig("iterations.pdf")
+plt.grid()
+plt.savefig("ResultsDir/iterations.pdf")
 plt.show()
 
-with io.XDMFFile(msh.comm, "out_poisson/poisson.xdmf", "w") as file:
+with io.XDMFFile(msh.comm, "ResultsDir/u_opt.xdmf", "w") as file:
     file.write_mesh(msh)
     file.write_function(u_direct)
