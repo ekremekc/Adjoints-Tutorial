@@ -6,7 +6,7 @@ from mpi4py import MPI
 import numpy as np
 import pyvista as pv
 
-nx, ny = 10, 10
+nx, ny = 32, 32
 L_x, L_y = 1.0, 1.0
 
 msh = mesh.create_rectangle(comm=MPI.COMM_WORLD,
@@ -34,7 +34,7 @@ u = TrialFunction(V)
 v = TestFunction(V)
 
 x = SpatialCoordinate(msh)
-f = fem.Constant(msh, ScalarType(-5)) # -6
+f = fem.Constant(msh, ScalarType(5)) # -6
 
 a = dot(grad(u), grad(v)) * dx
 L = dot(f, v) * dx 

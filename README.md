@@ -11,8 +11,8 @@ This tutorial uses finite element method to solve Poisson equations. Hence, we u
 This library can be installed directly with conda. We can make a conda environment for FEniCSx and then install this library into it.
 
 ```bash
-conda create -n diphydro python=3.11.0
-conda activate diphydro
+conda create -n adjoint-control python=3.11.0
+conda activate adjoint-control
 conda install pip
 conda install -c conda-forge fenics-dolfinx=0.9.0 pyvista=0.44.1 # Linux and macOS
 ```
@@ -20,5 +20,5 @@ conda install -c conda-forge fenics-dolfinx=0.9.0 pyvista=0.44.1 # Linux and mac
 If you exit the environment for some reason, we can re-activate it by:
 
 ```bash
-conda activate diphydro
+conda activate adjoint-control
 ```
