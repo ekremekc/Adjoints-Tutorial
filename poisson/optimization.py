@@ -71,17 +71,31 @@ for i in range(50):
     u_adjoint = problem_adjoint.solve()
 
     delJ_delf = fem.assemble_scalar(dJ_df_form)
+    print("gradient: ", delJ_delf)
     f.value = delJ_delf * alpha + f.value
     print("New f is: ", f.value)
     scalar_f.append(delJ_delf * alpha + f.value)
 
 import matplotlib.pyplot as plt
 
-plt.plot(iterations, scalar_f)
+# Set global font sizes for better consistency
+plt.rcParams.update({'font.size': 18,          # Overall font size
+                     'axes.titlesize': 16,     # Title size
+                     'axes.labelsize': 16,     # Label size
+                     'xtick.labelsize': 12,    # X-tick size
+                     'ytick.labelsize': 12,    # Y-tick size
+                     'legend.fontsize': 12,    # Legend size
+                     })
+
+fig, ax = plt.subplots(figsize=(8, 6)) # Use a specific size for better presentation
+plt.plot(iterations, scalar_f, 'r-')
 plt.xlabel("Iteration")
 plt.ylabel("$f$")
 plt.grid()
-plt.savefig("ResultsDir/iterations.pdf")
+if alpha==1E2:
+    plt.savefig("ResultsDir/Figure2b.png", dpi=300)
+elif alpha==1E3:
+    plt.savefig("ResultsDir/Figure2a.png", dpi=300)
 plt.show()
 
 with io.XDMFFile(msh.comm, "ResultsDir/u_opt.xdmf", "w") as file:
