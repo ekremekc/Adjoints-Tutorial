@@ -9,7 +9,7 @@ from mpi4py import MPI
 import numpy as np
 
 kappa = 4
-Q_total = 10  # W
+Q_total = 1.54  # W
 u_edge = 50  # C
 
 mesh, subdomains, facet_tags = gmshio.read_from_msh("MeshDir/3D_data.msh", MPI.COMM_WORLD, rank = 0, gdim = 3)
@@ -55,3 +55,5 @@ u_direct = direct_problem.solve()
 with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_direct.xdmf", "w", encoding=XDMFFile.Encoding.HDF5) as xdmf:
     xdmf.write_mesh(mesh)
     xdmf.write_function(u_direct)
+
+print("Max Temp: ", max(u_direct.x.array))

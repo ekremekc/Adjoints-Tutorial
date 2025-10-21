@@ -1,5 +1,5 @@
-from dolfinx.fem import functionspace, Constant, Function, form, assemble_scalar, locate_dofs_topological, dirichletbc
-from ufl import TrialFunction, dot, TestFunction, Measure, grad, max_value
+from dolfinx.fem import functionspace, Constant, Function, form, assemble_scalar, locate_dofs_topological, dirichletbc, Expression
+from ufl import TrialFunction, dot, TestFunction, Measure, grad, as_vector, SpatialCoordinate, exp, inner
 from dolfinx.fem.petsc import LinearProblem
 from dolfinx import default_scalar_type
 from dolfinx.io import XDMFFile
@@ -18,6 +18,7 @@ degree = 1
 
 V = functionspace(mesh, ("Lagrange", degree))
 u, p = TrialFunction(V), TestFunction(V)
+
 
 # Define the boundary conditions
 
@@ -56,14 +57,28 @@ with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_direct.xdmf", "w", encoding=XDMFFile
     xdmf.write_mesh(mesh)
     xdmf.write_function(u_direct)
 
-# Adjoint problem
+## Adjoint problem
+# Get the coordinates of the corresponding DoFs
+dof_coords = V.tabulate_dof_coordinates()
+
+x = SpatialCoordinate(mesh)
+w0 = Function(V)
 f_max = 80
-u_max = u_direct.x.array.max()
-print(u_max)
-diff = default_scalar_type(u_max-f_max)
+sigma = 0.05
+
+# Extract DoF values of u
+imax = np.argmax(u_direct.x.array)
+u_max = u_direct.x.array[imax]
+x_max = dof_coords[imax]
+x_max_ufl = as_vector(x_max)
+gaussian_expr = exp(-inner(x - x_max_ufl, x - x_max_ufl) / (2 * sigma**2))
+C_sigma = mesh.comm.allreduce(assemble_scalar(form(gaussian_expr * dx)), op=MPI.SUM)
+w_expr = gaussian_expr / C_sigma
+w0.interpolate(Expression(w_expr, V.element.interpolation_points()))
+
 v, q = TrialFunction(V), TestFunction(V)
 a_a = - kappa * dot(grad(v), grad(q)) * dx
-L_a = dot(diff, p) * dx
+L_a = dot(w0, p) * dx
 
 # Solve direct problem
 adjoint_problem = LinearProblem(a_a, L_a, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})

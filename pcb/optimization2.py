@@ -9,7 +9,7 @@ from mpi4py import MPI
 import numpy as np
 
 kappa = 4
-Q_total = 1  # W
+Q_total = 10  # W
 u_edge = 50  # C
 
 mesh, subdomains, facet_tags = gmshio.read_from_msh("MeshDir/3D_data.msh", MPI.COMM_WORLD, rank = 0, gdim = 3)
@@ -67,7 +67,6 @@ sigma = 0.05
 
 # Extract DoF values of u
 imax = np.argmax(u_direct.x.array)
-# u_max = Constant(V.mesh, default_scalar_type(u_direct.x.array[imax]))
 x_max = dof_coords[imax]
 x_max_ufl = as_vector(x_max)
 gaussian_expr = exp(-inner(x - x_max_ufl, x - x_max_ufl) / (2 * sigma**2))
@@ -77,8 +76,12 @@ w0.interpolate(Expression(w_expr, V.element.interpolation_points()))
 
 v, q = TrialFunction(V), TestFunction(V)
 a_a = - kappa * dot(grad(v), grad(q)) * dx
-L_a = dot(inner(w0,u_direct-u_desired), p) * dx
+# L_a = dot(inner(w0,u_direct-u_desired), p) * dx
 # L_a = dot(w0, p) * dx
+
+Iu = Constant(V.mesh, default_scalar_type(assemble_scalar(form((w0 * (u_direct - u_desired)) * dx))))
+L_a = (Iu * w0 * q) * dx
+
 
 bcs_adjoint = []
 edge_tags = [13,14,15,17]
@@ -98,7 +101,7 @@ with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_adjoint.xdmf", "w", encoding=XDMFFil
     xdmf.write_function(u_adjoint)
 
 
-dJ_df_form = form(u_adjoint * dx(q_tag))
+dJ_df_form = form(u_adjoint * dx)
 
 alpha = 1e2
 
@@ -107,18 +110,29 @@ scalar_f = [Q_total]
 for i in range(50):
     
     u_direct = problem_direct.solve()
+    Iu.value = assemble_scalar(form((w0 * (u_direct - u_desired)) * dx))
     u_adjoint = problem_adjoint.solve()
+
 
     J = abs(u_direct.x.array.max()-u_desired)
     delJ_delf = assemble_scalar(dJ_df_form)
-    print(f"Functional: {J:.3f}, delJ_delf: {delJ_delf:.6f}, Q_total: {Q_total:.3f} ")
+    print(f"Functional: {J:.3f}, delJ_delf: {delJ_delf:.6f}, Q_total: {Q_total*V_pcb:.3f} ")
     if J<2:
         break
-    Q_total = delJ_delf * alpha + Q_total
-    scalar_f.append(Q_total)
 
-    q_tot = Q_total / V_pcb
+    # Compute gradient with respect to Q_total
+    integral_local = assemble_scalar(form(u_adjoint * dx(q_tag)))   # ∫_{pcb} p dx
+    integral_global = mesh.comm.allreduce(integral_local, op=MPI.SUM)
+    dJ_dQ = (1.0 / V_pcb) * integral_global
+
+    # Gradient-descent update
+    Q_total += alpha * dJ_dQ
+
+    # Q_total = delJ_delf * alpha + Q_total
+    q_tot = Q_total
     f.x.array[subdomain_cells] = np.full_like(subdomain_cells, q_tot, dtype=default_scalar_type)
+    scalar_f.append(Q_total*V_pcb)
+    # f.x.array[:] = delJ_delf * alpha + f.x.array[:]
     f.x.scatter_forward()
 
 import matplotlib.pyplot as plt

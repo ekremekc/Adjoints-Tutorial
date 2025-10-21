@@ -3,11 +3,11 @@
 <Xdmf Version="3.0" xmlns:xi="https://www.w3.org/2001/XInclude">
   <Domain>
     <Grid Name="mesh" GridType="Uniform">
-      <Topology TopologyType="Tetrahedron" NumberOfElements="12858" NodesPerElement="4">
-        <DataItem Dimensions="12858 4" NumberType="Int" Format="HDF">u_adjoint.h5:/Mesh/mesh/topology</DataItem>
+      <Topology TopologyType="Tetrahedron" NumberOfElements="12893" NodesPerElement="4">
+        <DataItem Dimensions="12893 4" NumberType="Int" Format="HDF">u_adjoint.h5:/Mesh/mesh/topology</DataItem>
       </Topology>
       <Geometry GeometryType="XYZ">
-        <DataItem Dimensions="3602 3" Format="HDF">u_adjoint.h5:/Mesh/mesh/geometry</DataItem>
+        <DataItem Dimensions="3603 3" Format="HDF">u_adjoint.h5:/Mesh/mesh/geometry</DataItem>
       </Geometry>
     </Grid>
     <Grid Name="f" GridType="Collection" CollectionType="Temporal">
@@ -15,7 +15,7 @@
         <xi:include xpointer="xpointer(/Xdmf/Domain/Grid[@GridType='Uniform'][1]/*[self::Topology or self::Geometry])" />
         <Time Value="0" />
         <Attribute Name="f" AttributeType="Scalar" Center="Node">
-          <DataItem Dimensions="3602 1" Format="HDF">u_adjoint.h5:/Function/f/0</DataItem>
+          <DataItem Dimensions="3603 1" Format="HDF">u_adjoint.h5:/Function/f/0</DataItem>
         </Attribute>
       </Grid>
     </Grid>

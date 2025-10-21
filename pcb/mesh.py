@@ -21,6 +21,7 @@ gmsh.model.occ.removeAllDuplicates()
 gmsh.model.occ.synchronize()
 
 lc = 0.0080
+# lc = 0.0050
 
 led_tag = 2
 
