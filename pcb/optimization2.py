@@ -9,7 +9,7 @@ from mpi4py import MPI
 import numpy as np
 
 kappa = 4
-Q_total = 10  # W
+Q_total = 1  # W
 u_edge = 50  # C
 
 mesh, subdomains, facet_tags = gmshio.read_from_msh("MeshDir/3D_data.msh", MPI.COMM_WORLD, rank = 0, gdim = 3)
@@ -101,9 +101,9 @@ with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_adjoint.xdmf", "w", encoding=XDMFFil
     xdmf.write_function(u_adjoint)
 
 
-dJ_df_form = form(u_adjoint * dx)
+dJ_df_form = form(u_adjoint * dx(q_tag))
 
-alpha = 1e2
+alpha = 2e3
 
 scalar_f = [Q_total]
 
@@ -113,22 +113,17 @@ for i in range(50):
     Iu.value = assemble_scalar(form((w0 * (u_direct - u_desired)) * dx))
     u_adjoint = problem_adjoint.solve()
 
+    # Compute gradient with respect to Q_total
+    dJ_dQ = (1.0 / V_pcb) * assemble_scalar(dJ_df_form)
 
     J = abs(u_direct.x.array.max()-u_desired)
-    delJ_delf = assemble_scalar(dJ_df_form)
-    print(f"Functional: {J:.3f}, delJ_delf: {delJ_delf:.6f}, Q_total: {Q_total*V_pcb:.3f} ")
+    print(f"Functional: {J:.3f}, delJ_delf: {dJ_dQ:.6f}, Q_total: {Q_total*V_pcb:.3f} ")
     if J<2:
         break
-
-    # Compute gradient with respect to Q_total
-    integral_local = assemble_scalar(form(u_adjoint * dx(q_tag)))   # ∫_{pcb} p dx
-    integral_global = mesh.comm.allreduce(integral_local, op=MPI.SUM)
-    dJ_dQ = (1.0 / V_pcb) * integral_global
 
     # Gradient-descent update
     Q_total += alpha * dJ_dQ
 
-    # Q_total = delJ_delf * alpha + Q_total
     q_tot = Q_total
     f.x.array[subdomain_cells] = np.full_like(subdomain_cells, q_tot, dtype=default_scalar_type)
     scalar_f.append(Q_total*V_pcb)
