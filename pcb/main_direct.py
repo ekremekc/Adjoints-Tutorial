@@ -9,7 +9,7 @@ from mpi4py import MPI
 import numpy as np
 
 kappa = 4
-Q_total = 1.54  # W
+Q_total = 20.409  # W
 u_edge = 50  # C
 
 mesh, subdomains, facet_tags = gmshio.read_from_msh("MeshDir/3D_data.msh", MPI.COMM_WORLD, rank = 0, gdim = 3)
