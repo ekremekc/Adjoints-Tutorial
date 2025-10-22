@@ -9,7 +9,7 @@ from mpi4py import MPI
 import numpy as np
 
 kappa = 4
-Q_total = 1  # W
+Q_total = 3.77  # W
 u_edge = 50  # C
 
 mesh, subdomains, facet_tags = gmshio.read_from_msh("MeshDir/3D_data.msh", MPI.COMM_WORLD, rank = 0, gdim = 3)
@@ -65,7 +65,7 @@ dof_coords = V.tabulate_dof_coordinates()
 x = SpatialCoordinate(mesh)
 w0 = Function(V)
 u_desired = 80
-sigma = 0.05
+sigma = 0.02
 
 # Extract DoF values of u
 imax = np.argmax(u_direct.x.array)
@@ -106,14 +106,15 @@ alpha = 5e3
 
 scalar_f = [Q_total]
 
-
+J_form = form(w0*0.5*dot((u_direct-u_desired), (u_direct-u_desired))*dx)
 
 for i in range(50):
     
     u_direct = problem_direct.solve()
     u_adjoint = problem_adjoint.solve()
 
-    J = abs(u_direct.x.array.max()-u_desired)
+    # J = abs(u_direct.x.array.max()-u_desired)
+    J = assemble_scalar(J_form)
     dJ_df = assemble_scalar(dJ_df_form)
     df_dQ = 1/V_pcb
     dJ_dQ = dJ_df*df_dQ
