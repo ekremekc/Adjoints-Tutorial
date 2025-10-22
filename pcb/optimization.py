@@ -9,18 +9,15 @@ from mpi4py import MPI
 import numpy as np
 
 kappa = 4
-Q_total = 1  # W
+Q_total = 4  # W
 u_edge = 50  # C
 
 mesh, subdomains, facet_tags = gmshio.read_from_msh("MeshDir/3D_data.msh", MPI.COMM_WORLD, rank = 0, gdim = 3)
-
 degree = 1
-
 V = functionspace(mesh, ("Lagrange", degree))
 u, p = TrialFunction(V), TestFunction(V)
 
-# Define the boundary conditions
-
+# Define direct boundary conditions
 bcs = []
 edge_tags = [13,14,15,17]
 for tag in edge_tags:
@@ -57,17 +54,14 @@ with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_direct.xdmf", "w", encoding=XDMFFile
     xdmf.write_function(u_direct)
 
 ## Adjoint problem
-# Get the coordinates of the corresponding DoFs
-dof_coords = V.tabulate_dof_coordinates()
-
 x = SpatialCoordinate(mesh)
 w0 = Function(V)
 u_desired = 80
-sigma = 0.05
+sigma = 0.0001 # This is small to get Dirac-like function
 
 # Extract DoF values of u
 imax = np.argmax(u_direct.x.array)
-# u_max = Constant(V.mesh, default_scalar_type(u_direct.x.array[imax]))
+dof_coords = V.tabulate_dof_coordinates()
 x_max = dof_coords[imax]
 x_max_ufl = as_vector(x_max)
 gaussian_expr = exp(-inner(x - x_max_ufl, x - x_max_ufl) / (2 * sigma**2))
@@ -75,10 +69,13 @@ C_sigma = mesh.comm.allreduce(assemble_scalar(form(gaussian_expr * dx)), op=MPI.
 w_expr = gaussian_expr / C_sigma
 w0.interpolate(Expression(w_expr, V.element.interpolation_points()))
 
+with XDMFFile(MPI.COMM_WORLD, "ResultsDir/w.xdmf", "w", encoding=XDMFFile.Encoding.HDF5) as xdmf:
+    xdmf.write_mesh(mesh)
+    xdmf.write_function(w0)
+
 v, q = TrialFunction(V), TestFunction(V)
 a_a = - kappa * dot(grad(v), grad(q)) * dx
-L_a = dot(inner(w0,u_direct-u_desired), p) * dx
-# L_a = dot(w0, p) * dx
+L_a = dot(inner(w0,u_direct-u_desired), p) * dx(q_tag)
 
 bcs_adjoint = []
 edge_tags = [13,14,15,17]
@@ -97,29 +94,33 @@ with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_adjoint.xdmf", "w", encoding=XDMFFil
     xdmf.write_mesh(mesh)
     xdmf.write_function(u_adjoint)
 
-
 dJ_df_form = form(u_adjoint * dx(q_tag))
 
-alpha = 1e2
+J_form = form(w0*0.5*dot((u_direct-u_desired), (u_direct-u_desired))*dx)
 
 scalar_f = [Q_total]
+alpha = 1e2
 
-for i in range(50):
+for i in range(10):
     
     u_direct = problem_direct.solve()
     u_adjoint = problem_adjoint.solve()
 
-    J = abs(u_direct.x.array.max()-u_desired)
-    delJ_delf = assemble_scalar(dJ_df_form)
-    print(f"Functional: {J:.3f}, delJ_delf: {delJ_delf:.6f}, Q_total: {Q_total:.3f} ")
-    if J<2:
+    J = assemble_scalar(J_form)
+    J_dirac = abs(u_direct.x.array.max()-u_desired)
+    dJ_df = assemble_scalar(dJ_df_form)
+    df_dQ = 1/V_pcb
+    dJ_dQ = dJ_df*df_dQ
+    print(f"J_form: {J:.3f}, J_dirac: {J_dirac:.3f}, delJ_delf: {dJ_df:.6f}, Q_tot: {q_tot*V_pcb:.3f} ")
+    
+    if J_dirac<1E-2:
         break
-    Q_total = delJ_delf * alpha + Q_total
-    scalar_f.append(Q_total)
-
-    q_tot = Q_total / V_pcb
-    f.x.array[subdomain_cells] = np.full_like(subdomain_cells, q_tot, dtype=default_scalar_type)
-    f.x.scatter_forward()
+    else:
+        q_tot += alpha * dJ_dQ
+        f.x.array[subdomain_cells] = np.full_like(subdomain_cells, q_tot, dtype=default_scalar_type)
+        f.x.scatter_forward()
+        Q_total=q_tot*V_pcb
+        scalar_f.append(Q_total)
 
 import matplotlib.pyplot as plt
 
@@ -137,8 +138,5 @@ plt.plot(np.arange(0,len(scalar_f),1), scalar_f, 'r-')
 plt.xlabel("Iteration")
 plt.ylabel("$f$")
 plt.grid()
-if alpha==1E2:
-    plt.savefig("ResultsDir/Figure2b.png", dpi=300)
-elif alpha==1E3:
-    plt.savefig("ResultsDir/Figure2a.png", dpi=300)
+plt.savefig("ResultsDir/Figure4.png", dpi=300)
 plt.show()

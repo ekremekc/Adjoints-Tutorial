@@ -9,7 +9,7 @@ from mpi4py import MPI
 import numpy as np
 
 kappa = 4
-Q_total = 3.77  # W
+Q_total = 1  # W
 u_edge = 50  # C
 
 mesh, subdomains, facet_tags = gmshio.read_from_msh("MeshDir/3D_data.msh", MPI.COMM_WORLD, rank = 0, gdim = 3)
@@ -38,8 +38,6 @@ volume_form = form(Constant(mesh, PETSc.ScalarType(1)) * dx(q_tag))
 V_pcb = MPI.COMM_WORLD.allreduce(assemble_scalar(volume_form), op=MPI.SUM)
 q_tot = Q_total / V_pcb
 
-print("q_tot: ", q_tot)
-
 subdomain_cells = subdomains.find(q_tag)
 f.x.array[subdomain_cells] = np.full_like(subdomain_cells, q_tot, dtype=default_scalar_type)
 f.x.scatter_forward()
@@ -65,7 +63,7 @@ dof_coords = V.tabulate_dof_coordinates()
 x = SpatialCoordinate(mesh)
 w0 = Function(V)
 u_desired = 80
-sigma = 0.02
+sigma = 0.05
 
 # Extract DoF values of u
 imax = np.argmax(u_direct.x.array)
@@ -102,32 +100,26 @@ with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_adjoint.xdmf", "w", encoding=XDMFFil
 
 dJ_df_form = form(u_adjoint * dx(q_tag))
 
-alpha = 5e3
+alpha = 1e2
 
 scalar_f = [Q_total]
-
-J_form = form(w0*0.5*dot((u_direct-u_desired), (u_direct-u_desired))*dx)
 
 for i in range(50):
     
     u_direct = problem_direct.solve()
     u_adjoint = problem_adjoint.solve()
 
-    # J = abs(u_direct.x.array.max()-u_desired)
-    J = assemble_scalar(J_form)
-    dJ_df = assemble_scalar(dJ_df_form)
-    df_dQ = 1/V_pcb
-    dJ_dQ = dJ_df*df_dQ
-    print(f"Functional: {J:.3f}, delJ_delf: {dJ_df:.6f}, Q_tot: {q_tot*V_pcb:.3f} ")
+    J = abs(u_direct.x.array.max()-u_desired)
+    delJ_delf = assemble_scalar(dJ_df_form)
+    print(f"Functional: {J:.3f}, delJ_delf: {delJ_delf:.6f}, Q_total: {Q_total:.3f} ")
     if J<2:
         break
-
-    q_tot += alpha * dJ_dQ
-    f.x.array[subdomain_cells] = np.full_like(subdomain_cells, q_tot, dtype=default_scalar_type)
-    f.x.scatter_forward()
-    Q_total=q_tot*V_pcb
+    Q_total = delJ_delf * alpha + Q_total
     scalar_f.append(Q_total)
 
+    q_tot = Q_total / V_pcb
+    f.x.array[subdomain_cells] = np.full_like(subdomain_cells, q_tot, dtype=default_scalar_type)
+    f.x.scatter_forward()
 
 import matplotlib.pyplot as plt
 
