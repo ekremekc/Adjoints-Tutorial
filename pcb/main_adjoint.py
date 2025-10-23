@@ -9,7 +9,7 @@ from mpi4py import MPI
 import numpy as np
 
 kappa = 4
-Q_total = 15  # W
+Q_total = 4  # W
 u_edge = 50  # C
 
 mesh, subdomains, facet_tags = gmshio.read_from_msh("MeshDir/3D_data.msh", MPI.COMM_WORLD, rank = 0, gdim = 3)
@@ -58,17 +58,23 @@ with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_direct.xdmf", "w", encoding=XDMFFile
     xdmf.write_function(u_direct)
 
 ## Adjoint problem
-# Get the coordinates of the corresponding DoFs
-dof_coords = V.tabulate_dof_coordinates()
+# Solve direct problem
+problem_direct = LinearProblem(a_d, L_d, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+u_direct = problem_direct.solve()
 
+with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_direct.xdmf", "w", encoding=XDMFFile.Encoding.HDF5) as xdmf:
+    xdmf.write_mesh(mesh)
+    xdmf.write_function(u_direct)
+
+## Adjoint problem
 x = SpatialCoordinate(mesh)
 w0 = Function(V)
-f_max = 80
-sigma = 0.05
+u_desired = 80
+sigma = 0.0001 # This is small to get Dirac-like function
 
 # Extract DoF values of u
 imax = np.argmax(u_direct.x.array)
-u_max = u_direct.x.array[imax]
+dof_coords = V.tabulate_dof_coordinates()
 x_max = dof_coords[imax]
 x_max_ufl = as_vector(x_max)
 gaussian_expr = exp(-inner(x - x_max_ufl, x - x_max_ufl) / (2 * sigma**2))
@@ -76,13 +82,26 @@ C_sigma = mesh.comm.allreduce(assemble_scalar(form(gaussian_expr * dx)), op=MPI.
 w_expr = gaussian_expr / C_sigma
 w0.interpolate(Expression(w_expr, V.element.interpolation_points()))
 
+with XDMFFile(MPI.COMM_WORLD, "ResultsDir/w.xdmf", "w", encoding=XDMFFile.Encoding.HDF5) as xdmf:
+    xdmf.write_mesh(mesh)
+    xdmf.write_function(w0)
+
 v, q = TrialFunction(V), TestFunction(V)
 a_a = - kappa * dot(grad(v), grad(q)) * dx
-L_a = dot(w0, p) * dx
+L_a = dot(inner(w0,u_direct-u_desired), p) * dx(q_tag)
 
-# Solve direct problem
-adjoint_problem = LinearProblem(a_a, L_a, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
-u_adjoint = adjoint_problem.solve()
+bcs_adjoint = []
+edge_tags = [13,14,15,17]
+for tag in edge_tags:
+    u_D = Function(V)
+    u_D.x.array[:] = 0
+    facets = facet_tags.find(tag)
+    dofs = locate_dofs_topological(V, V.mesh.topology.dim - 1, facets)
+    bcs_adjoint.append(dirichletbc(u_D, dofs))
+
+# Solve adjoint problem
+problem_adjoint = LinearProblem(a_a, L_a, bcs=bcs_adjoint, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+u_adjoint = problem_adjoint.solve()
 
 with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_adjoint.xdmf", "w", encoding=XDMFFile.Encoding.HDF5) as xdmf:
     xdmf.write_mesh(mesh)

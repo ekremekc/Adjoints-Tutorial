@@ -49,14 +49,14 @@ L_d = dot(f, p) * dx(q_tag)
 problem_direct = LinearProblem(a_d, L_d, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
 u_direct = problem_direct.solve()
 
-with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_direct.xdmf", "w", encoding=XDMFFile.Encoding.HDF5) as xdmf:
-    xdmf.write_mesh(mesh)
-    xdmf.write_function(u_direct)
+# with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_direct.xdmf", "w", encoding=XDMFFile.Encoding.HDF5) as xdmf:
+#     xdmf.write_mesh(mesh)
+#     xdmf.write_function(u_direct)
 
 ## Adjoint problem
 x = SpatialCoordinate(mesh)
 w0 = Function(V)
-u_desired = 80
+u_desired = 79.5
 sigma = 0.0001 # This is small to get Dirac-like function
 
 # Extract DoF values of u
@@ -90,18 +90,19 @@ for tag in edge_tags:
 problem_adjoint = LinearProblem(a_a, L_a, bcs=bcs_adjoint, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
 u_adjoint = problem_adjoint.solve()
 
-with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_adjoint.xdmf", "w", encoding=XDMFFile.Encoding.HDF5) as xdmf:
-    xdmf.write_mesh(mesh)
-    xdmf.write_function(u_adjoint)
+# with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_adjoint.xdmf", "w", encoding=XDMFFile.Encoding.HDF5) as xdmf:
+#     xdmf.write_mesh(mesh)
+#     xdmf.write_function(u_adjoint)
 
 dJ_df_form = form(u_adjoint * dx(q_tag))
 
 J_form = form(w0*0.5*dot((u_direct-u_desired), (u_direct-u_desired))*dx)
 
-scalar_f = [Q_total]
-alpha = 1e2
+scalar_f = []
+J_list = []
+alpha = 3e1
 
-for i in range(10):
+for i in range(30):
     
     u_direct = problem_direct.solve()
     u_adjoint = problem_adjoint.solve()
@@ -121,22 +122,51 @@ for i in range(10):
         f.x.scatter_forward()
         Q_total=q_tot*V_pcb
         scalar_f.append(Q_total)
+        J_list.append(J)
+
+with XDMFFile(MPI.COMM_WORLD, "ResultsDir/u_direct_optimized.xdmf", "w", encoding=XDMFFile.Encoding.HDF5) as xdmf:
+    xdmf.write_mesh(mesh)
+    xdmf.write_function(u_direct)
 
 import matplotlib.pyplot as plt
 
 # Set global font sizes for better consistency
-plt.rcParams.update({'font.size': 18,          # Overall font size
-                     'axes.titlesize': 16,     # Title size
-                     'axes.labelsize': 16,     # Label size
-                     'xtick.labelsize': 12,    # X-tick size
-                     'ytick.labelsize': 12,    # Y-tick size
-                     'legend.fontsize': 12,    # Legend size
+plt.rcParams.update({'font.size': 22,          # Overall font size
+                     'axes.labelsize': 22,     # Label size
+                     'xtick.labelsize': 16,    # X-tick size
+                     'ytick.labelsize': 16,    # Y-tick size
+                     'legend.fontsize': 22,    # Legend size
                      })
 
-fig, ax = plt.subplots(figsize=(8, 6)) # Use a specific size for better presentation
-plt.plot(np.arange(0,len(scalar_f),1), scalar_f, 'r-')
-plt.xlabel("Iteration")
-plt.ylabel("$f$")
-plt.grid()
-plt.savefig("ResultsDir/Figure4.png", dpi=300)
+# fig, ax = plt.subplots(figsize=(8, 6)) # Use a specific size for better presentation
+# plt.plot(np.arange(0,len(scalar_f),1), scalar_f, 'r-')
+# plt.plot(np.arange(0,len(scalar_f),1), np.log10(np.array(J_list)), 'b-')
+# plt.xlabel("Iteration")
+# plt.ylabel("$f$")
+# plt.grid()
+# plt.savefig("ResultsDir/Figure6a.png", dpi=300)
+# plt.show()
+# 1. Setup figure and primary axis (ax1) for scalar_f ($f$)
+fig, ax1 = plt.subplots(figsize=(8, 6)) 
+
+color_f = 'r' 
+
+ax1.plot(np.arange(0,len(scalar_f),1), scalar_f, 'r-', label=r'$Q_t$')
+ax1.set_xlabel("Iteration")
+ax1.set_ylabel(r"$Q_t$", color=color_f) # Color the label
+ax1.tick_params(axis='y', labelcolor=color_f) # Color the ticks
+ax1.grid(True)
+
+ax2 = ax1.twinx() 
+color_j = 'b'
+
+ax2.plot(np.arange(0,len(scalar_f),1), np.array(J_list), 'b-', label=r"$\mathcal{J}_p$")
+ax2.set_ylabel(r"$\mathcal{J}_p$", color=color_j) # Color the label
+ax2.tick_params(axis='y', labelcolor=color_j) # Color the ticks
+
+lines = ax1.get_lines() + ax2.get_lines()
+ax1.legend(lines, [l.get_label() for l in lines], loc='upper right')
+fig.tight_layout()
+plt.savefig("ResultsDir/Figure6a.png", dpi=300, bbox_inches='tight')
+
 plt.show()

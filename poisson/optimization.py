@@ -1,6 +1,6 @@
 from dolfinx import fem, io, mesh, plot
 from dolfinx.fem.petsc import LinearProblem
-from ufl import dx, grad, dot, TrialFunction, TestFunction, SpatialCoordinate
+from ufl import dx, grad, dot, TrialFunction, TestFunction, SpatialCoordinate, inner
 from petsc4py.PETSc import ScalarType
 from mpi4py import MPI
 import numpy as np
@@ -76,15 +76,25 @@ for i in range(50):
     print("New f is: ", f.value)
     scalar_f.append(delJ_delf * alpha + f.value)
 
+
+V2 = fem.functionspace(msh, ("Lagrange", 2))
+u_analytical2 = fem.Function(V2)
+u_analytical2.interpolate(lambda x: 1 + x[0]**2 + 2 * x[1]**2)
+
+L2_error = fem.form(inner(u_direct - u_analytical2, u_direct - u_analytical2) * dx)
+error_local = fem.assemble_scalar(L2_error)
+error_L2 = np.sqrt(msh.comm.allreduce(error_local, op=MPI.SUM))
+if msh.comm.rank == 0:  # Only print the error on one process
+    print(f"Error_L2 : {error_L2:.2e}")
+
 import matplotlib.pyplot as plt
 
 # Set global font sizes for better consistency
-plt.rcParams.update({'font.size': 18,          # Overall font size
-                     'axes.titlesize': 16,     # Title size
-                     'axes.labelsize': 16,     # Label size
-                     'xtick.labelsize': 12,    # X-tick size
-                     'ytick.labelsize': 12,    # Y-tick size
-                     'legend.fontsize': 12,    # Legend size
+plt.rcParams.update({'font.size': 22,          # Overall font size
+                     'axes.labelsize': 22,     # Label size
+                     'xtick.labelsize': 16,    # X-tick size
+                     'ytick.labelsize': 16,    # Y-tick size
+                     'legend.fontsize': 22,    # Legend size
                      })
 
 fig, ax = plt.subplots(figsize=(8, 6)) # Use a specific size for better presentation
@@ -93,9 +103,9 @@ plt.xlabel("Iteration")
 plt.ylabel("$f$")
 plt.grid()
 if alpha==1E2:
-    plt.savefig("ResultsDir/Figure2b.png", dpi=300)
+    plt.savefig("ResultsDir/Figure2b.png", bbox_inches='tight', dpi=300)
 elif alpha==1E3:
-    plt.savefig("ResultsDir/Figure2a.png", dpi=300)
+    plt.savefig("ResultsDir/Figure2a.png", bbox_inches='tight', dpi=300)
 plt.show()
 
 with io.XDMFFile(msh.comm, "ResultsDir/u_opt.xdmf", "w") as file:
