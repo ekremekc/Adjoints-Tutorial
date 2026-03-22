@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
+plt.rcParams.update({'font.size': 22})
 nx, ny = 100, 100
 
 L = 1
@@ -23,9 +23,9 @@ levels = np.linspace(1, 4, nx*2)
 plt.contourf(u,200, levels = levels , cmap='jet')
 plt.axis('off')
 cbar = plt.colorbar()
-cbar.set_label("$u$", fontsize=22)
+cbar.set_label("$u$")
 cbar.set_ticks(np.linspace(1,4,7))
-cbar.ax.tick_params(labelsize=16) # Adjust tick font size
+cbar.ax.tick_params() # Adjust tick font size
 plt.tight_layout()
 plt.savefig("ResultsDir/u_analytical.pdf")
 plt.savefig("ResultsDir/plots/u_analytical.png")
