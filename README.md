@@ -4,7 +4,19 @@ In this tutorial repository, we show how Poisson mother problem is adjointized a
 
 ## Journal Article Information
 
-The outputs and the purpose of the code is explained in detail in the manuscript submitted to [Journal of Mathematical Science and Modelling](https://dergipark.org.tr/en/pub/jmsm). Once the manuscript becomes available online, the accessible link will be shared in this section.
+The outputs and the purpose of the code is explained in detail in the manuscript published in [Journal of Mathematical Science and Modelling](https://dergipark.org.tr/en/pub/jmsm). The article can be accessed from [this link](https://doi.org/10.33187/jmsm.1810588). Further, the bibtex entry for citation is give below:
+
+```
+@article{ekici2026adjoint,
+  author  = {Ekici, E.},
+  title   = {Adjoint Optimization for the {Poisson} Problem with Applications},
+  journal = {Journal of Mathematical Sciences and Modelling},
+  year    = {2026},
+  pages   = {77--84},
+  doi     = {10.33187/jmsm.1810588},
+  note    = {Advanced Online Publication}
+}
+```
 
 # Installation 
 
